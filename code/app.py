@@ -7,6 +7,11 @@ import shutil
 from io import BytesIO
 from PyPDF2 import PdfReader
 from docx2pdf import convert
+import platform
+
+SYSTEME = platform.system()
+preview_pdf_active = SYSTEME == "Windows"
+
 
 # Configuration du dossier de base
 DOSSIER_BASE = os.path.join(os.path.expanduser("~"), "OneDrive - Cafdoc", "Documents", "DEVS", "Appli_Accuse_Reception")
@@ -107,10 +112,12 @@ if uploaded_file:
             deplacer_fichier(temp_file_path, uploaded_file.name)
             st.success(f"✅ Documents générés dans : `{dossier_sortie}`")
 
-            if premier_fichier:
+            if premier_fichier and preview_pdf_active:
                 st.subheader("🔎 Aperçu du premier accusé généré")
                 try:
                     contenu = convertir_en_pdf_et_lire(premier_fichier)
                     st.text_area("Contenu du document (PDF)", value=contenu, height=300)
                 except Exception as e:
                     st.warning(f"Impossible de prévisualiser le document : {e}")
+            elif not preview_pdf_active:
+                st.info("La prévisualisation PDF est désactivée (non supportée sur ce système).")
