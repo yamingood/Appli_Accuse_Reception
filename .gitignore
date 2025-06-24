@@ -1,0 +1,27 @@
+# Environnements virtuels
+.venv/
+venv/
+__pycache__/
+
+# Fichiers temporaires
+*.pyc
+*.pyo
+*.log
+*.tmp
+*.DS_Store
+
+# Fichiers Excel uploadés et générés
+archive/
+accuse_recep/
+*.xlsx
+*.xls
+
+# Fichiers générés
+*.pdf
+*.docx
+
+# Streamlit
+.streamlit/
+
+# Autres
+temp_uploaded.xlsx
