@@ -11,22 +11,20 @@ import platform
 import zipfile
 import io
 
-
+# Détection système
 SYSTEME = platform.system()
 preview_pdf_active = SYSTEME == "Windows"
 
-
-# Configuration du dossier de base
-DOSSIER_BASE = os.path.dirname(os.path.abspath(__file__)) 
-
+# 📁 Dossier base = un niveau au-dessus du dossier courant (../)
+DOSSIER_BASE = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 definir_chemin = lambda *chemins: os.path.join(DOSSIER_BASE, *chemins)
 
-# Créer les répertoires requis
+# ✅ Crée les dossiers si besoin
 def verifier_et_creer_repertoires():
     for dossier in ["template", "accuse_recep", "archive"]:
         os.makedirs(definir_chemin(dossier), exist_ok=True)
 
-# Déplacer le fichier Excel dans le dossier archive
+# 🔁 Déplace le fichier Excel dans un dossier archive
 def deplacer_fichier(temp_path, nom_original):
     archive_path = definir_chemin("archive", nom_original)
     if os.path.exists(archive_path):
@@ -37,11 +35,11 @@ def deplacer_fichier(temp_path, nom_original):
         archive_path = f"{base}_{i}{ext}"
     shutil.move(temp_path, archive_path)
 
-# Extraire les données depuis le fichier Excel
+# 🔍 Extraction des données
 def extraire_donnees(fichier_excel, champs_attendus):
     try:
         df = pd.read_excel(fichier_excel)
-        df.columns = [col.strip().replace(' ', '_') for col in df.columns]  # ✅ Nouveau
+        df.columns = [col.strip().replace(' ', '_') for col in df.columns]
         champs_manquants = [champ for champ in champs_attendus if champ not in df.columns]
         if champs_manquants:
             st.error(f"Champs manquants : {', '.join(champs_manquants)}")
@@ -51,7 +49,7 @@ def extraire_donnees(fichier_excel, champs_attendus):
         st.error(f"Erreur de lecture : {e}")
         return None
 
-# Générer les fichiers Word avec docxtpl et renvoyer le premier pour prévisualisation
+# 🧾 Remplissage des templates Word
 def remplir_template(fichier_template, dossier_sortie, donnees_liste, dateDuJour):
     os.makedirs(dossier_sortie, exist_ok=True)
     premier_fichier = None
@@ -74,6 +72,7 @@ def remplir_template(fichier_template, dossier_sortie, donnees_liste, dateDuJour
             premier_fichier = fichier_sortie
     return premier_fichier
 
+# 📦 Zipper le dossier
 def creer_zip_depuis_dossier(dossier_path):
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zipf:
@@ -85,7 +84,7 @@ def creer_zip_depuis_dossier(dossier_path):
     zip_buffer.seek(0)
     return zip_buffer
 
-# Convertir DOCX en PDF et lire son contenu
+# 🧾 Lire le contenu du PDF pour affichage
 def convertir_en_pdf_et_lire(docx_path):
     temp_pdf_path = docx_path.replace(".docx", ".pdf")
     convert(docx_path, temp_pdf_path)
@@ -94,7 +93,7 @@ def convertir_en_pdf_et_lire(docx_path):
         text = "\n\n".join(page.extract_text() or "" for page in reader.pages)
     return text
 
-# Streamlit UI
+# 🖼️ Interface utilisateur
 st.set_page_config(page_title="Accusés de réception", layout="centered")
 st.title("📄 Générateur d'accusés de réception")
 
@@ -118,32 +117,19 @@ if uploaded_file:
             "Adresse_Ligne_6", "Adresse_Ligne_7"
         ]
 
-
         donnees_liste = extraire_donnees(temp_file_path, champs_attendus)
 
         if donnees_liste:
             premier_fichier = remplir_template(template_word, dossier_sortie, donnees_liste, dateDuJour)
             deplacer_fichier(temp_file_path, uploaded_file.name)
-            st.success(f"✅ Documents générés dans : `{dossier_sortie}`")
-            # Création du zip
-            zip_buffer = creer_zip_depuis_dossier(dossier_sortie)
-            zip_filename = f"accuses_reception_{dateDuJour.replace('/', '-')}.zip"
+            st.success("✅ Documents générés avec succès !")
 
-            # Bouton de téléchargement
+            zip_buffer = creer_zip_depuis_dossier(dossier_sortie)
             st.download_button(
                 label="📦 Télécharger tous les accusés (.zip)",
                 data=zip_buffer,
-                file_name=zip_filename,
+                file_name=f"accuses_reception_{dateDuJour.replace('/', '-')}.zip",
                 mime="application/zip"
             )
 
 
-            if premier_fichier and preview_pdf_active:
-                st.subheader("🔎 Aperçu du premier accusé généré")
-                try:
-                    contenu = convertir_en_pdf_et_lire(premier_fichier)
-                    st.text_area("Contenu du document (PDF)", value=contenu, height=300)
-                except Exception as e:
-                    st.warning(f"Impossible de prévisualiser le document : {e}")
-            elif not preview_pdf_active:
-                st.info("La prévisualisation PDF est désactivée (non supportée sur ce système).")
