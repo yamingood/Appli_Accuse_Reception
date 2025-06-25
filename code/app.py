@@ -17,7 +17,7 @@ preview_pdf_active = SYSTEME == "Windows"
 
 
 # Configuration du dossier de base
-DOSSIER_BASE = os.path.join(os.path.expanduser("~"), "OneDrive - Cafdoc", "Documents", "DEVS", "Appli_Accuse_Reception")
+DOSSIER_BASE = os.path.dirname(os.path.abspath(__file__)) 
 
 definir_chemin = lambda *chemins: os.path.join(DOSSIER_BASE, *chemins)
 
@@ -109,7 +109,7 @@ if uploaded_file:
             f.write(uploaded_file.getbuffer())
 
         dateDuJour = date.today().strftime("%d/%m/%Y")
-        template_word = definir_chemin("template", "13. Accusé de réception déclaration d'impayés.docx")
+        template_word = definir_chemin("template", "template.docx")
         dossier_sortie = definir_chemin("accuse_recep", f"accuses_reception_{dateDuJour.replace('/', '-')}")
 
         champs_attendus = [
