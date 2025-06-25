@@ -8,6 +8,9 @@ from io import BytesIO
 from PyPDF2 import PdfReader
 from docx2pdf import convert
 import platform
+import zipfile
+import io
+
 
 SYSTEME = platform.system()
 preview_pdf_active = SYSTEME == "Windows"
@@ -71,6 +74,17 @@ def remplir_template(fichier_template, dossier_sortie, donnees_liste, dateDuJour
             premier_fichier = fichier_sortie
     return premier_fichier
 
+def creer_zip_depuis_dossier(dossier_path):
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zipf:
+        for root, _, files in os.walk(dossier_path):
+            for file in files:
+                file_path = os.path.join(root, file)
+                arcname = os.path.relpath(file_path, start=dossier_path)
+                zipf.write(file_path, arcname=arcname)
+    zip_buffer.seek(0)
+    return zip_buffer
+
 # Convertir DOCX en PDF et lire son contenu
 def convertir_en_pdf_et_lire(docx_path):
     temp_pdf_path = docx_path.replace(".docx", ".pdf")
@@ -111,6 +125,18 @@ if uploaded_file:
             premier_fichier = remplir_template(template_word, dossier_sortie, donnees_liste, dateDuJour)
             deplacer_fichier(temp_file_path, uploaded_file.name)
             st.success(f"✅ Documents générés dans : `{dossier_sortie}`")
+            # Création du zip
+            zip_buffer = creer_zip_depuis_dossier(dossier_sortie)
+            zip_filename = f"accuses_reception_{dateDuJour.replace('/', '-')}.zip"
+
+            # Bouton de téléchargement
+            st.download_button(
+                label="📦 Télécharger tous les accusés (.zip)",
+                data=zip_buffer,
+                file_name=zip_filename,
+                mime="application/zip"
+            )
+
 
             if premier_fichier and preview_pdf_active:
                 st.subheader("🔎 Aperçu du premier accusé généré")
