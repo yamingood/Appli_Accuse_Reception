@@ -4,27 +4,26 @@ from docxtpl import DocxTemplate
 from datetime import date, datetime
 import os
 import shutil
-from io import BytesIO
 from PyPDF2 import PdfReader
 from docx2pdf import convert
 import platform
 import zipfile
 import io
 
-# Détection système
+# Configuration système
 SYSTEME = platform.system()
 preview_pdf_active = SYSTEME == "Windows"
 
-# 📁 Dossier base = un niveau au-dessus du dossier courant (../)
+# Dossier de base relatif
 DOSSIER_BASE = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 definir_chemin = lambda *chemins: os.path.join(DOSSIER_BASE, *chemins)
 
-# ✅ Crée les dossiers si besoin
+# Créer les répertoires requis
 def verifier_et_creer_repertoires():
     for dossier in ["template", "accuse_recep", "archive"]:
         os.makedirs(definir_chemin(dossier), exist_ok=True)
 
-# 🔁 Déplace le fichier Excel dans un dossier archive
+# Déplacer l'Excel dans l'archive
 def deplacer_fichier(temp_path, nom_original):
     archive_path = definir_chemin("archive", nom_original)
     if os.path.exists(archive_path):
@@ -35,7 +34,7 @@ def deplacer_fichier(temp_path, nom_original):
         archive_path = f"{base}_{i}{ext}"
     shutil.move(temp_path, archive_path)
 
-# 🔍 Extraction des données
+# Extraction des données Excel
 def extraire_donnees(fichier_excel, champs_attendus):
     try:
         df = pd.read_excel(fichier_excel)
@@ -49,12 +48,15 @@ def extraire_donnees(fichier_excel, champs_attendus):
         st.error(f"Erreur de lecture : {e}")
         return None
 
-# 🧾 Remplissage des templates Word
-def remplir_template(fichier_template, dossier_sortie, donnees_liste, dateDuJour):
+# Génération Word > PDF et suppression du .docx
+def remplir_et_convertir(fichier_template, dossier_sortie, donnees_liste, horodatage, progress_bar=None, compteur_txt=None):
     os.makedirs(dossier_sortie, exist_ok=True)
-    premier_fichier = None
+    premier_pdf = None
+    total = len(donnees_liste)
+
     for i, donnees in enumerate(donnees_liste):
         tpl = DocxTemplate(fichier_template)
+
         for cle, valeur in donnees.items():
             if pd.isna(valeur):
                 donnees[cle] = ""
@@ -65,52 +67,63 @@ def remplir_template(fichier_template, dossier_sortie, donnees_liste, dateDuJour
 
         tpl.render(donnees)
         matricule = str(donnees.get("Matricule", f"{i+1}")).strip()
-        fichier_sortie = os.path.join(dossier_sortie, f"accuseReception_{matricule}_{dateDuJour.replace('/', '-')}.docx")
-        tpl.save(fichier_sortie)
+        nom_base = f"accuseReception_{matricule}_{horodatage}"
+        fichier_docx = os.path.join(dossier_sortie, f"{nom_base}.docx")
+        fichier_pdf = fichier_docx.replace(".docx", ".pdf")
+
+        tpl.save(fichier_docx)
+        convert(fichier_docx, fichier_pdf)
+        os.remove(fichier_docx)  # Supprime le .docx
 
         if i == 0:
-            premier_fichier = fichier_sortie
-    return premier_fichier
+            premier_pdf = fichier_pdf
 
-# 📦 Zipper le dossier
+        if progress_bar:
+            progress_bar.progress((i + 1) / total)
+        if compteur_txt:
+            compteur_txt.text(f"📄 Fichiers générés : {i + 1} / {total}")
+
+    return premier_pdf
+
+# Lire le contenu PDF
+def convertir_en_pdf_et_lire(pdf_path):
+    with open(pdf_path, "rb") as f:
+        reader = PdfReader(f)
+        return "\n\n".join(page.extract_text() or "" for page in reader.pages)
+
+# Création d'un ZIP en mémoire
 def creer_zip_depuis_dossier(dossier_path):
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zipf:
         for root, _, files in os.walk(dossier_path):
             for file in files:
-                file_path = os.path.join(root, file)
-                arcname = os.path.relpath(file_path, start=dossier_path)
-                zipf.write(file_path, arcname=arcname)
+                if file.endswith(".pdf"):
+                    file_path = os.path.join(root, file)
+                    arcname = os.path.relpath(file_path, start=dossier_path)
+                    zipf.write(file_path, arcname=arcname)
     zip_buffer.seek(0)
     return zip_buffer
 
-# 🧾 Lire le contenu du PDF pour affichage
-def convertir_en_pdf_et_lire(docx_path):
-    temp_pdf_path = docx_path.replace(".docx", ".pdf")
-    convert(docx_path, temp_pdf_path)
-    with open(temp_pdf_path, "rb") as f:
-        reader = PdfReader(f)
-        text = "\n\n".join(page.extract_text() or "" for page in reader.pages)
-    return text
-
-# 🖼️ Interface utilisateur
+# Interface Streamlit
 st.set_page_config(page_title="Accusés de réception", layout="centered")
 st.title("📄 Générateur d'accusés de réception")
 
 verifier_et_creer_repertoires()
-
-uploaded_file = st.file_uploader("Téléversez un fichier Excel", type=["xlsx", "xls"])
+uploaded_file = st.file_uploader("📂 Téléversez un fichier Excel", type=["xlsx", "xls"])
 
 if uploaded_file:
-    with st.spinner("Traitement du fichier..."):
+    with st.spinner("🔄 Traitement du fichier en cours..."):
+        # Enregistrement temporaire
         temp_file_path = definir_chemin("temp_uploaded.xlsx")
         with open(temp_file_path, "wb") as f:
             f.write(uploaded_file.getbuffer())
 
-        dateDuJour = date.today().strftime("%d/%m/%Y")
+        # Date et heure
+        horodatage = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         template_word = definir_chemin("template", "template.docx")
-        dossier_sortie = definir_chemin("accuse_recep", f"accuses_reception_{dateDuJour.replace('/', '-')}")
+        dossier_sortie = definir_chemin("accuse_recep", f"accuses_reception_{horodatage}")
 
+        # Champs requis
         champs_attendus = [
             "Date_Liq", "Matricule", "Identité_Allocataire", "Identité_Destinataire_bailleur",
             "Adresse_Ligne_2", "Adresse_Ligne_3", "Adresse_Ligne_4", "Adresse_Ligne_5",
@@ -120,16 +133,32 @@ if uploaded_file:
         donnees_liste = extraire_donnees(temp_file_path, champs_attendus)
 
         if donnees_liste:
-            premier_fichier = remplir_template(template_word, dossier_sortie, donnees_liste, dateDuJour)
-            deplacer_fichier(temp_file_path, uploaded_file.name)
-            st.success("✅ Documents générés avec succès !")
+            # Barre de progression et compteur
+            progress_bar = st.progress(0)
+            compteur_txt = st.empty()
 
-            zip_buffer = creer_zip_depuis_dossier(dossier_sortie)
-            st.download_button(
-                label="📦 Télécharger tous les accusés (.zip)",
-                data=zip_buffer,
-                file_name=f"accuses_reception_{dateDuJour.replace('/', '-')}.zip",
-                mime="application/zip"
+            premier_pdf = remplir_et_convertir(
+                template_word,
+                dossier_sortie,
+                donnees_liste,
+                horodatage,
+                progress_bar=progress_bar,
+                compteur_txt=compteur_txt
             )
 
+            progress_bar.empty()
+            compteur_txt.empty()
+            deplacer_fichier(temp_file_path, uploaded_file.name)
+            st.success("✅ Tous les documents ont été générés avec succès !")
 
+
+            # Téléchargement ZIP
+            zip_buffer = creer_zip_depuis_dossier(dossier_sortie)
+            zip_filename = f"accuses_reception_{horodatage}.zip"
+
+            st.download_button(
+                label="📦 Télécharger tous les accusés en PDF (.zip)",
+                data=zip_buffer,
+                file_name=zip_filename,
+                mime="application/zip"
+            )
