@@ -6,6 +6,7 @@ import os
 import shutil
 from io import BytesIO
 from PyPDF2 import PdfReader
+import time
 from docx2pdf import convert
 import platform
 import zipfile
@@ -75,6 +76,7 @@ def remplir_et_convertir(fichier_template, dossier_sortie, donnees_liste, horoda
 
             tpl.save(fichier_docx)
             convert(fichier_docx, fichier_pdf)
+            time.sleep(0.5)
             os.remove(fichier_docx)
 
             if i == 0:
