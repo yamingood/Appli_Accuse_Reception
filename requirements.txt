@@ -3,4 +3,5 @@ pandas
 python-docx
 docxtpl
 openpyxl
-
+pythoncom
+zipfile
